@@ -240,7 +240,7 @@
             <div class="video-container">
                 <video
                     id="eyeTrackingVideoPlayer"
-                    src="https://res.cloudinary.com/ddp3tohxk/video/upload/v1757416692/%E9%99%A4%E8%9E%A8%E4%BB%AA_bzhlgy.mp4"
+                    src="https://res.cloudinary.com/ddp3tohxk/video/upload/v1760178012/%E5%8F%8C%E4%BD%8E_hdyiu1.mp4"
                     width="100%"
                     crossorigin="anonymous"
                     preload="auto"
