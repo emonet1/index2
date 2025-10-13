@@ -275,6 +275,16 @@
 
         let eyeTrackingData = { gazePoints: [], saccades: [], fixations: [], heatmapSnapshots: [], calibrationData: { points: [], accuracyPercentage: null, timestamp: null } };
 
+        // =================================================================
+        // MODIFICATION START: Add cumulative arrays for final local export
+        // =================================================================
+        let sessionGazePoints = [];
+        let sessionSaccades = [];
+        let sessionFixations = [];
+        // =================================================================
+        // MODIFICATION END
+        // =================================================================
+
         let persistentHeatmapData = [];
         let allTimeGazePoints = [];
 
@@ -456,10 +466,7 @@
                 stopVideoInfoUpdate();
                 debug(`isVideoExperimentActive 设置为: ${isVideoExperimentActive}`);
             };
-
-            // =======================================================================
-            // MODIFICATION START: Automatic data download on experiment completion
-            // =======================================================================
+            
             videoPlayer.onended = () => {
                 debug('视频播放结束');
                 isVideoExperimentActive = false;
@@ -474,22 +481,24 @@
                 // 视频结束后调用保存热力图的函数
                 saveAllHeatmaps();
 
-                // 新增：实验结束后自动下载眼动数据
+                // =======================================================================
+                // MODIFICATION START: Automatic local data download on experiment completion
+                // =======================================================================
                 setTimeout(() => {
                     debug('实验结束，自动触发本地数据下载。');
                     swal({
-                        title: '数据下载',
-                        text: '实验数据将自动下载到您的本地设备。',
+                        title: '数据本地下载',
+                        text: '在视频播放期间的眼动数据将自动下载到您的本地设备。',
                         icon: 'info',
                         button: '好的',
                     }).then(() => {
-                        exportData(); // 调用现有的导出函数
+                        saveLocalData(); // MODIFICATION: Call the new local save function
                     });
                 }, 3500); // 稍作延迟以确保其他操作完成
+                // =======================================================================
+                // MODIFICATION END
+                // =======================================================================
             };
-            // =======================================================================
-            // MODIFICATION END
-            // =======================================================================
 
             videoPlayer.addEventListener('seeking', (e) => {
                 if (isVideoExperimentActive) {
@@ -724,6 +733,7 @@
                 };
 
                 eyeTrackingData.gazePoints.push(testGazePoint);
+                sessionGazePoints.push(testGazePoint); // MODIFICATION: Also push to session data for testing
                 allTimeGazePoints.push({
                     x: testGazePoint.x,
                     y: testGazePoint.y,
@@ -838,6 +848,7 @@
 
             processSaccadeAndFixation(gazePoint);
             eyeTrackingData.gazePoints.push(gazePoint);
+            sessionGazePoints.push(gazePoint); // MODIFICATION: Store in cumulative array for local export
 
             allTimeGazePoints.push({
                 x: gazePoint.x,
@@ -889,13 +900,15 @@
                             y: Math.round((currentFixation.startPoint.y + currentFixation.endPoint.y) / 2)
                         };
                         currentFixation.endVideoTimestamp = lastGazePoint.videoTimestamp;
-                        eyeTrackingData.fixations.push({...currentFixation});
+                        const fixationData = {...currentFixation};
+                        eyeTrackingData.fixations.push(fixationData);
+                        sessionFixations.push(fixationData); // MODIFICATION: Store in cumulative array for local export
                         fixationCount++;
                         totalFixationTime += duration;
                     }
                 }
                 const saccadeDuration = new Date(gazePoint.timestamp).getTime() - new Date(lastGazePoint.timestamp).getTime();
-                eyeTrackingData.saccades.push({
+                const saccadeData = {
                     startPoint: {...lastGazePoint},
                     endPoint: {...gazePoint},
                     distance: Math.round(distance),
@@ -906,7 +919,9 @@
                     isVideoActive: isVideoExperimentActive,
                     startVideoTimestamp: lastGazePoint.videoTimestamp,
                     endVideoTimestamp: gazePoint.videoTimestamp
-                });
+                };
+                eyeTrackingData.saccades.push(saccadeData);
+                sessionSaccades.push(saccadeData); // MODIFICATION: Store in cumulative array for local export
                 saccadeCount++;
                 currentFixation = {
                     startPoint: {...gazePoint},
@@ -1375,6 +1390,124 @@
                 eyeTrackingData.fixations = dataToSave.fixations.concat(eyeTrackingData.fixations);
             }
         }
+
+        // =================================================================
+        // MODIFICATION START: Functions for local data saving at experiment end
+        // =================================================================
+
+        /**
+         * Converts an array of objects to a CSV formatted string.
+         * @param {Array<Object>} data The array of data objects.
+         * @param {Array<string>} headers The CSV header row.
+         * @returns {string} The CSV formatted string.
+         */
+        function convertToCSV(data, headers) {
+            const headerRow = headers.join(',');
+            const rows = data.map(item => {
+                return headers.map(header => {
+                    const value = item[header];
+                    // Handle potential commas in string values by quoting them
+                    const escaped = (value === null || value === undefined) ? '' : String(value);
+                    return `"${escaped.replace(/"/g, '""')}"`;
+                }).join(',');
+            });
+            return [headerRow, ...rows].join('\n');
+        }
+
+        /**
+         * Triggers a browser download for the given content.
+         * @param {string} filename The name of the file to be downloaded.
+         * @param {string} content The content of the file.
+         */
+        function downloadFile(filename, content) {
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        /**
+         * Filters, formats, and saves the eye-tracking data collected during the video experiment to local files.
+         * This function creates three separate CSV files for gaze points, saccades, and fixations.
+         * Note: Browsers cannot create folders directly for security reasons. Instead, three distinct files are generated for download.
+         */
+        function saveLocalData() {
+            debug('Starting local data save process for video experiment data.');
+
+            // 1. Filter data: Only include records where isVideoActive is true.
+            const videoGazePoints = sessionGazePoints.filter(p => p.isVideoActive && p.videoTimestamp !== null);
+            const videoSaccades = sessionSaccades.filter(s => s.isVideoActive && s.startVideoTimestamp !== null);
+            const videoFixations = sessionFixations.filter(f => f.isVideoActive && f.videoTimestamp !== null);
+
+            debug(`Filtered data for saving: ${videoGazePoints.length} gaze points, ${videoSaccades.length} saccades, ${videoFixations.length} fixations.`);
+
+            if (videoGazePoints.length === 0 && videoSaccades.length === 0 && videoFixations.length === 0) {
+                swal('无视频数据', '在视频播放期间没有收集到有效的眼动数据，无法保存。', 'info');
+                return;
+            }
+
+            // Create a unique filename prefix
+            const filePrefix = `eye_tracking_video_${studentId || 'unknown'}_${sessionId}`;
+
+            // 2. Process and save Gaze Points
+            if (videoGazePoints.length > 0) {
+                const gazeHeaders = ['videoTimestamp', 'x', 'y', 'relativeX', 'relativeY'];
+                const gazeCSV = convertToCSV(videoGazePoints, gazeHeaders);
+                downloadFile(`${filePrefix}_gaze_points.csv`, gazeCSV);
+                debug('Gaze points CSV file download triggered.');
+            }
+
+            // 3. Process and save Saccades
+            if (videoSaccades.length > 0) {
+                // Flatten the saccade data for CSV export
+                const flatSaccades = videoSaccades.map(s => ({
+                    startVideoTimestamp: s.startVideoTimestamp,
+                    endVideoTimestamp: s.endVideoTimestamp,
+                    startX: s.startPoint.x,
+                    startY: s.startPoint.y,
+                    endX: s.endPoint.x,
+                    endY: s.endPoint.y,
+                    distance: s.distance,
+                    duration: s.duration
+                }));
+                const saccadeHeaders = ['startVideoTimestamp', 'endVideoTimestamp', 'startX', 'startY', 'endX', 'endY', 'distance', 'duration'];
+                const saccadeCSV = convertToCSV(flatSaccades, saccadeHeaders);
+                downloadFile(`${filePrefix}_saccades.csv`, saccadeCSV);
+                debug('Saccades CSV file download triggered.');
+            }
+
+            // 4. Process and save Fixations
+            if (videoFixations.length > 0) {
+                // Flatten the fixation data for CSV export
+                const flatFixations = videoFixations.map(f => ({
+                    startVideoTimestamp: f.videoTimestamp, // 'videoTimestamp' holds the start time for fixations
+                    endVideoTimestamp: f.endVideoTimestamp,
+                    duration: f.duration,
+                    centerX: f.centerPoint.x,
+                    centerY: f.centerPoint.y,
+                    pointCount: f.pointCount
+                }));
+                const fixationHeaders = ['startVideoTimestamp', 'endVideoTimestamp', 'duration', 'centerX', 'centerY', 'pointCount'];
+                const fixationCSV = convertToCSV(flatFixations, fixationHeaders);
+                downloadFile(`${filePrefix}_fixations.csv`, fixationCSV);
+                debug('Fixations CSV file download triggered.');
+            }
+            
+            swal('本地保存完成', '眼动数据已生成并开始下载。请检查您的下载文件夹。', 'success');
+        }
+
+        // =================================================================
+        // MODIFICATION END
+        // =================================================================
+
 
         // =======================================================================
         // 官方校准与百分比精度测试流程
