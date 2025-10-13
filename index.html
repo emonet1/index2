@@ -1535,53 +1535,13 @@
         function stopStatsUpdate() { if (statsUpdateInterval) clearInterval(statsUpdateInterval); }
 
         function exportData() {
-            if (gazeCount === 0) {
-                swal('无数据', '没有可导出的数据。', 'warning');
-                return;
-            }
-
-            const filePrefix = `eye-tracking-data-${studentId}-${sessionId}`;
-
-            // 1. 筛选并转换注视点数据 (Gaze Points)
-            const videoGazePoints = eyeTrackingData.gazePoints.filter(p => p.isVideoActive);
-            if (videoGazePoints.length > 0) {
-                const gazeHeader = "videoTimestamp,x,y,relativeX,relativeY\n";
-                const gazeCsv = videoGazePoints.map(p => `${p.videoTimestamp},${p.x},${p.y},${p.relativeX || ''},${p.relativeY || ''}`).join("\n");
-                downloadFile(gazeHeader + gazeCsv, `${filePrefix}-gaze_points.csv`, 'text/csv');
-            }
-
-            // 2. 筛选并转换眼跳数据 (Saccades)
-            const videoSaccades = eyeTrackingData.saccades.filter(s => s.isVideoActive);
-            if (videoSaccades.length > 0) {
-                const saccadeHeader = "startVideoTimestamp,endVideoTimestamp,startX,startY,endX,endY,distance,duration,velocity\n";
-                const saccadeCsv = videoSaccades.map(s => `${s.startVideoTimestamp},${s.endVideoTimestamp},${s.startPoint.x},${s.startPoint.y},${s.endPoint.x},${s.endPoint.y},${s.distance},${s.duration},${s.velocity}`).join("\n");
-                downloadFile(saccadeHeader + saccadeCsv, `${filePrefix}-saccades.csv`, 'text/csv');
-            }
-
-            // 3. 筛选并转换注视数据 (Fixations)
-            const videoFixations = eyeTrackingData.fixations.filter(f => f.isVideoActive);
-            if (videoFixations.length > 0) {
-                const fixationHeader = "videoTimestamp,duration,centerX,centerY\n";
-                const fixationCsv = videoFixations.map(f => `${f.videoTimestamp},${f.duration},${f.centerPoint.x},${f.centerPoint.y}`).join("\n");
-                downloadFile(fixationHeader + fixationCsv, `${filePrefix}-fixations.csv`, 'text/csv');
-            }
-
-            // 4. 下载包含所有数据的原始JSON文件
-            const allDataStr = JSON.stringify({ sessionInfo: { sessionId, userId, studentId, studentName }, collectedData: eyeTrackingData }, null, 2);
-            downloadFile(allDataStr, `${filePrefix}-all_data.json`, 'application/json');
-
-            swal('导出完成', '数据已开始下载。请检查您的下载文件夹。', 'success');
-        }
-
-        function downloadFile(content, fileName, contentType) {
+            if (gazeCount === 0) return swal('无数据', '沒有可导出的数据。', 'warning');
+            const dataStr = JSON.stringify({ sessionInfo: { sessionId, userId, studentId, studentName }, collectedData: eyeTrackingData }, null, 2);
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(new Blob([content], { type: contentType }));
-            link.download = fileName;
-            document.body.appendChild(link);
+            link.href = URL.createObjectURL(new Blob([dataStr], {type: 'application/json'}));
+            link.download = `eye-tracking-data-${studentId}-${sessionId}.json`;
             link.click();
-            document.body.removeChild(link);
             URL.revokeObjectURL(link.href);
-            debug(`文件已下载: ${fileName}`);
         }
 
         async function initializeSystem() {
