@@ -64,6 +64,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.0/heatmap.min.js"></script>
     <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- MODIFICATION: 引入 SheetJS 库用于生成 Excel 文件 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #f0f0f0; }
         #heatmapContainer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; visibility: hidden; }
@@ -275,15 +277,10 @@
 
         let eyeTrackingData = { gazePoints: [], saccades: [], fixations: [], heatmapSnapshots: [], calibrationData: { points: [], accuracyPercentage: null, timestamp: null } };
 
-        // =================================================================
-        // MODIFICATION START: Add cumulative arrays for final local export
-        // =================================================================
+        // 用于最终本地导出的累积数组
         let sessionGazePoints = [];
         let sessionSaccades = [];
         let sessionFixations = [];
-        // =================================================================
-        // MODIFICATION END
-        // =================================================================
 
         let persistentHeatmapData = [];
         let allTimeGazePoints = [];
@@ -481,9 +478,7 @@
                 // 视频结束后调用保存热力图的函数
                 saveAllHeatmaps();
 
-                // =======================================================================
-                // MODIFICATION START: Automatic local data download on experiment completion
-                // =======================================================================
+                // 实验结束时，自动触发本地数据下载
                 setTimeout(() => {
                     debug('实验结束，自动触发本地数据下载。');
                     swal({
@@ -492,12 +487,9 @@
                         icon: 'info',
                         button: '好的',
                     }).then(() => {
-                        saveLocalData(); // MODIFICATION: Call the new local save function
+                        saveLocalData(); // 调用新的本地保存函数
                     });
                 }, 3500); // 稍作延迟以确保其他操作完成
-                // =======================================================================
-                // MODIFICATION END
-                // =======================================================================
             };
 
             videoPlayer.addEventListener('seeking', (e) => {
@@ -515,7 +507,7 @@
         }
 
         // ===========================================
-        // 新增功能：在测试端保存所有热力图
+        // MODIFICATION: 修改热力图保存/查看功能
         // ===========================================
         function saveAllHeatmaps() {
             debug(`开始保存所有热力图，共 ${eyeTrackingData.heatmapSnapshots.length} 张`);
@@ -526,20 +518,21 @@
 
             // 创建一个新窗口来展示所有图片
             const newWindow = window.open('', '_blank');
-            newWindow.document.write('<html><head><title>热力图结果</title><style>body { font-family: sans-serif; } img { max-width: 45%; margin: 10px; border: 2px solid #ccc; } h1 { text-align: center; } </style></head><body>');
-            newWindow.document.write(`<h1>共 ${eyeTrackingData.heatmapSnapshots.length} 张热力图</h1>`);
+            newWindow.document.write('<html><head><title>热力图结果</title><style>body { font-family: sans-serif; text-align: center; } img { max-width: 45%; margin: 10px; border: 2px solid #ccc; cursor: pointer; transition: transform 0.2s; } img:hover { transform: scale(1.02); } h1 { text-align: center; } </style></head><body>');
+            newWindow.document.write(`<h1>共 ${eyeTrackingData.heatmapSnapshots.length} 张热力图 (点击图片可在新标签页中查看大图)</h1>`);
 
             // 遍历所有快照链接，并在新窗口中创建图片元素
             eyeTrackingData.heatmapSnapshots.forEach((snapshot, index) => {
                 const imageUrl = snapshot.storageUrl;
                 const fileName = snapshot.fileName || `heatmap_${index + 1}.png`;
-                newWindow.document.write(`<a href="${imageUrl}" download="${fileName}"><img src="${imageUrl}" alt="${fileName}"></a>`);
+                // *** 核心修改点：增加了 target="_blank" ***
+                newWindow.document.write(`<a href="${imageUrl}" target="_blank" download="${fileName}"><img src="${imageUrl}" alt="${fileName}"></a>`);
             });
 
             newWindow.document.write('</body></html>');
             newWindow.document.close();
 
-            swal('操作完成', '所有热力图已在新窗口中打开，您可以右键单击图片进行保存。', 'success');
+            swal('操作完成', '所有热力图已在新窗口中打开，您可以直接点击图片进行查看或右键保存。', 'success');
         }
 
 
@@ -733,7 +726,7 @@
                 };
 
                 eyeTrackingData.gazePoints.push(testGazePoint);
-                sessionGazePoints.push(testGazePoint); // MODIFICATION: Also push to session data for testing
+                sessionGazePoints.push(testGazePoint); // 同时推送到会话数据以供测试
                 allTimeGazePoints.push({
                     x: testGazePoint.x,
                     y: testGazePoint.y,
@@ -848,7 +841,7 @@
 
             processSaccadeAndFixation(gazePoint);
             eyeTrackingData.gazePoints.push(gazePoint);
-            sessionGazePoints.push(gazePoint); // MODIFICATION: Store in cumulative array for local export
+            sessionGazePoints.push(gazePoint); // 存储到用于本地导出的累积数组
 
             allTimeGazePoints.push({
                 x: gazePoint.x,
@@ -902,7 +895,7 @@
                         currentFixation.endVideoTimestamp = lastGazePoint.videoTimestamp;
                         const fixationData = {...currentFixation};
                         eyeTrackingData.fixations.push(fixationData);
-                        sessionFixations.push(fixationData); // MODIFICATION: Store in cumulative array for local export
+                        sessionFixations.push(fixationData); // 存储到用于本地导出的累积数组
                         fixationCount++;
                         totalFixationTime += duration;
                     }
@@ -921,7 +914,7 @@
                     endVideoTimestamp: gazePoint.videoTimestamp
                 };
                 eyeTrackingData.saccades.push(saccadeData);
-                sessionSaccades.push(saccadeData); // MODIFICATION: Store in cumulative array for local export
+                sessionSaccades.push(saccadeData); // 存储到用于本地导出的累积数组
                 saccadeCount++;
                 currentFixation = {
                     startPoint: {...gazePoint},
@@ -1392,116 +1385,93 @@
         }
 
         // =================================================================
-        // MODIFICATION START: Functions for local data saving at experiment end
+        // MODIFICATION: 修改本地数据保存为Excel格式
         // =================================================================
 
         /**
-         * Converts an array of objects to a CSV formatted string.
-         * @param {Array<Object>} data The array of data objects.
-         * @param {Array<string>} headers The CSV header row.
-         * @returns {string} The CSV formatted string.
-         */
-        function convertToCSV(data, headers) {
-            const headerRow = headers.join(',');
-            const rows = data.map(item => {
-                return headers.map(header => {
-                    const value = item[header];
-                    // Handle potential commas in string values by quoting them
-                    const escaped = (value === null || value === undefined) ? '' : String(value);
-                    return `"${escaped.replace(/"/g, '""')}"`;
-                }).join(',');
-            });
-            return [headerRow, ...rows].join('\n');
-        }
-
-        /**
-         * Triggers a browser download for the given content.
-         * @param {string} filename The name of the file to be downloaded.
-         * @param {string} content The content of the file.
-         */
-        function downloadFile(filename, content) {
-            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            if (link.download !== undefined) {
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                link.setAttribute('download', filename);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-            }
-        }
-
-        /**
-         * Filters, formats, and saves the eye-tracking data collected during the video experiment to local files.
-         * This function creates three separate CSV files for gaze points, saccades, and fixations.
-         * Note: Browsers cannot create folders directly for security reasons. Instead, three distinct files are generated for download.
+         * 过滤、格式化在视频实验期间收集的眼动数据，并将其保存到
+         * 一个包含三个工作表（Gaze Points、Saccades、Fixations）的Excel文件中。
          */
         function saveLocalData() {
-            debug('Starting local data save process for video experiment data.');
+            debug('开始将视频实验数据保存到本地Excel文件。');
 
-            // 1. Filter data: Only include records where isVideoActive is true.
+            // 1. 过滤数据：只包括 isVideoActive 为 true 的记录。
             const videoGazePoints = sessionGazePoints.filter(p => p.isVideoActive && p.videoTimestamp !== null);
             const videoSaccades = sessionSaccades.filter(s => s.isVideoActive && s.startVideoTimestamp !== null);
             const videoFixations = sessionFixations.filter(f => f.isVideoActive && f.videoTimestamp !== null);
 
-            debug(`Filtered data for saving: ${videoGazePoints.length} gaze points, ${videoSaccades.length} saccades, ${videoFixations.length} fixations.`);
+            debug(`已过滤待保存的数据: ${videoGazePoints.length} 个注视点, ${videoSaccades.length} 个眼跳, ${videoFixations.length} 个注视。`);
 
             if (videoGazePoints.length === 0 && videoSaccades.length === 0 && videoFixations.length === 0) {
                 swal('无视频数据', '在视频播放期间没有收集到有效的眼动数据，无法保存。', 'info');
                 return;
             }
 
-            // Create a unique filename prefix
-            const filePrefix = `eye_tracking_video_${studentId || 'unknown'}_${sessionId}`;
+            try {
+                // 创建一个新的工作簿
+                const wb = XLSX.utils.book_new();
+                const filePrefix = `eye_tracking_video_${studentId || 'unknown'}_${sessionId}`;
+                const fileName = `${filePrefix}.xlsx`;
 
-            // 2. Process and save Gaze Points
-            if (videoGazePoints.length > 0) {
-                const gazeHeaders = ['videoTimestamp', 'x', 'y', 'relativeX', 'relativeY'];
-                const gazeCSV = convertToCSV(videoGazePoints, gazeHeaders);
-                downloadFile(`${filePrefix}_gaze_points.csv`, gazeCSV);
-                debug('Gaze points CSV file download triggered.');
-            }
+                // 2. 处理并添加“Gaze Points”工作表
+                if (videoGazePoints.length > 0) {
+                    const gazeData = videoGazePoints.map(p => ({
+                        '视频时间戳 (s)': p.videoTimestamp,
+                        '屏幕坐标 X': p.x,
+                        '屏幕坐标 Y': p.y,
+                        '视频内相对坐标 X': p.relativeX,
+                        '视频内相对坐标 Y': p.relativeY,
+                        '系统时间戳': p.timestamp,
+                        '是否全屏': p.isFullscreen
+                    }));
+                    const wsGaze = XLSX.utils.json_to_sheet(gazeData);
+                    XLSX.utils.book_append_sheet(wb, wsGaze, 'Gaze Points');
+                    debug('“Gaze Points”工作表已创建。');
+                }
 
-            // 3. Process and save Saccades
-            if (videoSaccades.length > 0) {
-                // Flatten the saccade data for CSV export
-                const flatSaccades = videoSaccades.map(s => ({
-                    startVideoTimestamp: s.startVideoTimestamp,
-                    endVideoTimestamp: s.endVideoTimestamp,
-                    startX: s.startPoint.x,
-                    startY: s.startPoint.y,
-                    endX: s.endPoint.x,
-                    endY: s.endPoint.y,
-                    distance: s.distance,
-                    duration: s.duration
-                }));
-                const saccadeHeaders = ['startVideoTimestamp', 'endVideoTimestamp', 'startX', 'startY', 'endX', 'endY', 'distance', 'duration'];
-                const saccadeCSV = convertToCSV(flatSaccades, saccadeHeaders);
-                downloadFile(`${filePrefix}_saccades.csv`, saccadeCSV);
-                debug('Saccades CSV file download triggered.');
-            }
+                // 3. 处理并添加“Saccades”工作表
+                if (videoSaccades.length > 0) {
+                    const flatSaccades = videoSaccades.map(s => ({
+                        '开始视频时间戳 (s)': s.startVideoTimestamp,
+                        '结束视频时间戳 (s)': s.endVideoTimestamp,
+                        '起始点 X': s.startPoint.x,
+                        '起始点 Y': s.startPoint.y,
+                        '结束点 X': s.endPoint.x,
+                        '结束点 Y': s.endPoint.y,
+                        '距离 (px)': s.distance,
+                        '持续时间 (ms)': s.duration
+                    }));
+                    const wsSaccades = XLSX.utils.json_to_sheet(flatSaccades);
+                    XLSX.utils.book_append_sheet(wb, wsSaccades, 'Saccades');
+                    debug('“Saccades”工作表已创建。');
+                }
 
-            // 4. Process and save Fixations
-            if (videoFixations.length > 0) {
-                // Flatten the fixation data for CSV export
-                const flatFixations = videoFixations.map(f => ({
-                    startVideoTimestamp: f.videoTimestamp, // 'videoTimestamp' holds the start time for fixations
-                    endVideoTimestamp: f.endVideoTimestamp,
-                    duration: f.duration,
-                    centerX: f.centerPoint.x,
-                    centerY: f.centerPoint.y,
-                    pointCount: f.pointCount
-                }));
-                const fixationHeaders = ['startVideoTimestamp', 'endVideoTimestamp', 'duration', 'centerX', 'centerY', 'pointCount'];
-                const fixationCSV = convertToCSV(flatFixations, fixationHeaders);
-                downloadFile(`${filePrefix}_fixations.csv`, fixationCSV);
-                debug('Fixations CSV file download triggered.');
+                // 4. 处理并添加“Fixations”工作表
+                if (videoFixations.length > 0) {
+                    const flatFixations = videoFixations.map(f => ({
+                        '开始视频时间戳 (s)': f.videoTimestamp,
+                        '结束视频时间戳 (s)': f.endVideoTimestamp,
+                        '持续时间 (ms)': f.duration,
+                        '中心点 X': f.centerPoint.x,
+                        '中心点 Y': f.centerPoint.y,
+                        '包含注视点数': f.pointCount
+                    }));
+                    const wsFixations = XLSX.utils.json_to_sheet(flatFixations);
+                    XLSX.utils.book_append_sheet(wb, wsFixations, 'Fixations');
+                    debug('“Fixations”工作表已创建。');
+                }
+
+                // 5. 触发Excel文件下载
+                XLSX.writeFile(wb, fileName);
+                debug(`Excel 文件 '${fileName}' 下载已触发。`);
+                
+                swal('本地保存完成', `眼动数据已生成Excel文件 (${fileName}) 并开始下载。请检查您的下载文件夹。`, 'success');
+
+            } catch (error) {
+                console.error('生成或保存Excel文件失败:', error);
+                debug(`生成Excel文件时出错: ${error.message}`);
+                swal('保存失败', '生成Excel文件时发生错误，请查看控制台日志。', 'error');
             }
-            
-            swal('本地保存完成', '眼动数据已生成并开始下载。请检查您的下载文件夹。', 'success');
         }
 
         // =================================================================
@@ -1679,7 +1649,7 @@
 
         async function initializeSystem() {
             try {
-                if (typeof h337 === 'undefined' || typeof swal === 'undefined') throw new Error('依赖库加载失败');
+                if (typeof h337 === 'undefined' || typeof swal === 'undefined' || typeof XLSX === 'undefined') throw new Error('依赖库加载失败');
                 if (!await loadWebGazerScript() || typeof webgazer === 'undefined') throw new Error('WebGazer加载失败');
                 heatmapInstance = h337.create({ container: document.getElementById('heatmapContainer'), radius: 25, maxOpacity: 0.6, minOpacity: 0.1, blur: 0.8 });
                 await testFirebaseConnection();
